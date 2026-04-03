@@ -1,0 +1,87 @@
+name: Build ParquetViewer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build Windows exe
+        run: pyinstaller --name "ParquetViewer" --windowed --onedir --noconfirm --clean --hidden-import pandas --hidden-import pyarrow --hidden-import openpyxl parquet_viewer.py
+
+      - name: Zip Windows build
+        run: Compress-Archive -Path dist/ParquetViewer -DestinationPath ParquetViewer-Windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ParquetViewer-Windows
+          path: ParquetViewer-Windows.zip
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build Mac app
+        run: pyinstaller --name "ParquetViewer" --windowed --onedir --noconfirm --clean --hidden-import pandas --hidden-import pyarrow --hidden-import openpyxl parquet_viewer.py
+
+      - name: Add file associations to Info.plist
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.local.parquetviewer" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.0" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes array" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:0 dict" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:0:CFBundleTypeExtensions array" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:0:CFBundleTypeExtensions:0 string parquet" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:0:CFBundleTypeExtensions:1 string parq" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:0:CFBundleTypeName string 'Parquet File'" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:0:CFBundleTypeRole string Viewer" dist/ParquetViewer.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:0:LSHandlerRank string Owner" dist/ParquetViewer.app/Contents/Info.plist
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg_staging
+          cp -r dist/ParquetViewer.app dmg_staging/
+          ln -s /Applications dmg_staging/Applications
+          hdiutil create -volname "ParquetViewer" -srcfolder dmg_staging -ov -format UDZO ParquetViewer-Mac.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ParquetViewer-Mac
+          path: ParquetViewer-Mac.dmg
+
+  release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ParquetViewer-Windows/ParquetViewer-Windows.zip
+            ParquetViewer-Mac/ParquetViewer-Mac.dmg
