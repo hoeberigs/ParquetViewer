@@ -298,10 +298,10 @@ class ParquetViewer(tk.Tk):
         else:
             if col == "(all columns)":
                 mask = self.df.apply(
-                    lambda c: c.astype(str).str.lower().str.contains(query, na=False)
+                    lambda c: c.astype(str).str.lower().str.contains(query, na=False, regex=False)
                 ).any(axis=1)
             else:
-                mask = self.df[col].astype(str).str.lower().str.contains(query, na=False)
+                mask = self.df[col].astype(str).str.lower().str.contains(query, na=False, regex=False)
             self.filtered_df = self.df[mask]
         self.current_page = 0
         self._render_page()
