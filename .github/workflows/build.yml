@@ -19,8 +19,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pyinstaller
 
+      - name: Smoke test (source)
+        run: python smoke_test.py
+
       - name: Build Windows exe
         run: pyinstaller --name "ParquetViewer" --windowed --onedir --noconfirm --clean --hidden-import pandas --hidden-import pyarrow --hidden-import openpyxl parquet_viewer.py
+
+      - name: Verify bundled exe starts
+        run: |
+          Start-Process -FilePath "dist\ParquetViewer\ParquetViewer.exe" -PassThru | ForEach-Object {
+            Start-Sleep -Seconds 5
+            if (!$_.HasExited) {
+              Write-Host "PASS: ParquetViewer.exe started successfully"
+              $_.Kill()
+            } else {
+              Write-Host "FAIL: ParquetViewer.exe exited with code $($_.ExitCode)"
+              exit 1
+            }
+          }
+        shell: pwsh
+        timeout-minutes: 2
 
       - name: Zip Windows build
         run: Compress-Archive -Path dist/ParquetViewer -DestinationPath ParquetViewer-Windows.zip
@@ -42,8 +60,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pyinstaller
 
+      - name: Smoke test (source)
+        run: python smoke_test.py
+
       - name: Build Mac app
         run: pyinstaller --name "ParquetViewer" --windowed --onedir --noconfirm --clean --hidden-import pandas --hidden-import pyarrow --hidden-import openpyxl parquet_viewer.py
+
+      - name: Verify bundled app starts
+        run: |
+          dist/ParquetViewer.app/Contents/MacOS/ParquetViewer &
+          APP_PID=$!
+          sleep 5
+          if kill -0 $APP_PID 2>/dev/null; then
+            echo "PASS: ParquetViewer.app started successfully"
+            kill $APP_PID
+          else
+            echo "FAIL: ParquetViewer.app exited early"
+            exit 1
+          fi
+        timeout-minutes: 2
 
       - name: Add file associations to Info.plist
         run: |
